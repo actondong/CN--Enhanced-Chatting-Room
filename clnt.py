@@ -3,6 +3,7 @@ import socket
 import select
 import threading
 import time
+from datetime import datetime
 import logging
 from collections import defaultdict
 RECV_BUFFER = 4096
@@ -10,19 +11,22 @@ SOCKET_LIST_READ = []
 usrName = "usr"
 
 class myThread (threading.Thread):
-    def __init__(self, name):
+    def __init__(self, name,host,port,usr):
         threading.Thread.__init__(self)
         self.name = name
+        self.host = host
+        self.port = port
+        self.usr = usr
     def run(self):
         print "Starting " + self.name
         while 1:
-            time.sleep(30)
-            t_stamp = time.datetime.now()
-            
-
-
-        print "Exiting " + self.name
-
+            protocal = "heartbeat"
+            t_stamp = datetime.now().strftime("%Y-%m-%d%H:%M:%S")#change datetime obj to str in a fixed format
+            msg = self.usr + " "+ protocal+ " "+ t_stamp#prepend with a protocal tag
+            c_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            c_sock.connect((self.host,self.port))  
+            c_sock.send(msg)
+            time.sleep(30)#every 30 secs, send out a live signal
 
 def chat_client():
     if(len(sys.argv) < 3) :
@@ -61,6 +65,9 @@ def chat_client():
         sys.stdout.write('[>>>] '); sys.stdout.flush()
     except:
     	sys.exit("Unable to connect")
+    hearbeat_t = myThread("heartbeat",host,port,usrName)
+    hearbeat_t.setDaemon(True)
+    hearbeat_t.start()
     SOCKET_LIST_READ.append(sys.stdin)
     while 1:
         #print "in while"
@@ -88,16 +95,13 @@ def chat_client():
             else:
                 data = sock.recv(4096)
                 if not data:
-                    print "\nDisconnected from server"
+                    print "\nsocket brokes\n"
                     SOCKET_LIST_READ.remove(sock)
                 else:
                     sys.stdout.write(data)
                     sys.stdout.flush()
                     SOCKET_LIST_READ.remove(sock)
                     sock.close()
-
-
-                
 
 
 if __name__ == "__main__":

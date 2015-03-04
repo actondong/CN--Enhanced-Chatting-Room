@@ -3,6 +3,7 @@ import socket
 import select
 import threading
 import time
+from datetime import datetime
 import logging
 from collections import defaultdict
 RECV_BUFFER = 4096
@@ -14,6 +15,29 @@ usr_store_msg =defaultdict(lambda:" ")
 usr_pass = {}
 usr_blacklist=defaultdict(lambda:[])
 sock_ip ={}
+usr_timeoflastsig=defaultdict(lambda:" ")
+heartbeat_lock = threading.Lock()
+class myThread (threading.Thread):
+    def __init__(self, name):
+        threading.Thread.__init__(self)
+        self.name = name
+    def run(self):
+        print "Starting " + self.name
+        while 1:
+            cur_timestamp = datetime.now()
+            heartbeat_lock.acquire(1)
+            for u,t in usr_timeoflastsig.items():
+                  print u
+                  print t
+                  t_datetime_obj = datetime.strptime(t,"%Y-%m-%d%H:%M:%S")
+                  if (cur_timestamp - t_datetime_obj).total_seconds() > 30:                   
+                        del usr_ip[u]
+                        print "remove "+u
+                        del usr_timeoflastsig[u]
+                        print "usr logout by heartbeat"
+                        broadcast(u+" logout\n")
+            heartbeat_lock.release()
+            time.sleep(30)#every 30 secs, checkout thru usr_timeoflastsig
 
 def server():
       with open('credentials.txt') as inputfile:
@@ -31,7 +55,9 @@ def server():
 #become a server socket
       s_sock.listen(5)
       SOCKET_LIST_READ.append(s_sock)
-
+      heartbeat_t = myThread("heartbeat")
+      heartbeat_t.setDaemon(True)
+      heartbeat_t.start()
       while 1:
             ready_to_read,ready_to_write,in_error = select.select(SOCKET_LIST_READ,SOCKET_LIST_WRITE,[],0)
             for sock in ready_to_read:
@@ -52,10 +78,16 @@ def server():
                               if recv_buff:
                                     sys.stdout.write(recv_buff+"\n")
                                     sys.stdout.flush()
-                                    #broadcast(s_sock,sock,recv_buff)
       			#process the protocal
                                     recv_list = recv_buff.split(" ")
                                     print recv_list
+                        #heartbeat
+                                    if recv_list[1] == "heartbeat":
+                                          usrName = recv_list[0]
+                                          timeoflastsig = recv_list[2]
+                                          heartbeat_lock.acquire(1)
+                                          usr_timeoflastsig[usrName] = timeoflastsig
+                                          heartbeat_lock.release()
                         #login            
                                     if recv_list[0] == "logIn":
                                           usrName = recv_list[1]
@@ -65,13 +97,11 @@ def server():
                                           if usrName in usr_pass:
                                                 print "usr exist"
                                                 if passWord == usr_pass[usrName]:
-                                                      #print "passWord pass"
-                                                      print"usr_socket_dict pass"
                                                       usr_ip[usrName] = addr     
                                                       sock.send("Ok")    
                                                       time.sleep(1)         
                                                       login_broad = ">>>"+usrName+"<<<" + "logs in\n"
-                                                      broadcast(login_broad)
+                                                      broadcast(login_broad,addr)
                                                       store_msg = usr_store_msg[usrName]
                                                       sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                                                       sock_to_send.connect((addr,6655))
@@ -83,9 +113,16 @@ def server():
                         #logout                 
                                     if recv_list[1] == "logout":
                                           usrName=recv_list[0]
+                                          print usrName+"log out"
                                           logout_broad = ">>>"+usrName+"<<<" + "logs out\n"
-                                          usr_ip.remove(usrName)
-                                          broadcast(logout_broad)
+                                          del usr_ip[usrName]
+                                          heartbeat_lock.acquire(1)
+                                          try:
+                                                del usr_timeoflastsig[usrName]
+                                          except:
+                                                print "fail to del usr_timeoflastsig"
+                                          heartbeat_lock.release()
+                                          broadcast(logout_broad,addr)
                         #block sb
                                     if recv_list[1] == "block":
                                           if recv_list[2] in usr_ip:
@@ -149,8 +186,7 @@ def server():
                                           print "in broadcast mode"
                                           print usr_ip.items()
                                           msg = recv_list[2]
-                                          broadcast(msg)
-
+                                          broadcast(msg,addr)
                                     SOCKET_LIST_READ.remove(sock)
                                     sock.close()
                               else:
@@ -158,24 +194,25 @@ def server():
                               	if sock in SOCKET_LIST_READ:
       			         		SOCKET_LIST_READ.remove(sock)
       			except:
-      				#recv failed
                               print "in except"
                               continue
 
-def broadcast (message):
+def broadcast (message,self_addr=None):
       print "broadcast()"
-      for usr in usr_ip:
-            addr_msg= usr_ip[usr]
-            print addr_msg
-            sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock_to_send.connect((addr_msg,6655))
-            if sock_to_send != sock :
-                  try :
-                        sock_to_send.send(message)
-                  except :
-                        print"fail in bd()"
-
+      if len(usr_ip.items()) > 0:
+            for usr in usr_ip:
+                  addr_msg= usr_ip[usr]
+                  print addr_msg
+                  sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  if addr_msg != self_addr :
+                        sock_to_send.connect((addr_msg,6655))
+                        try :
+                              sock_to_send.send(message)
+                        except :
+                              print"fail in broadcast()"
+      else:
+            print "no usr left..."
 
 if __name__ == "__main__":
-	sys.exit(server())
+	server()
 
