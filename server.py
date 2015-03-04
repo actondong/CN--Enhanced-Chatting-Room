@@ -9,14 +9,13 @@ RECV_BUFFER = 4096
 SOCKET_LIST_READ = []
 SOCKET_LIST_WRITE = []
 usr_ip = {}
-def defactory():
-      return " "
+#usr_socket_dict = defaultdict(int)
+usr_store_msg =defaultdict(lambda:" ")
+usr_pass = {}
+usr_blacklist=defaultdict(lambda:[])
+sock_ip ={}
 
 def server():
-      usr_socket_dict = defaultdict(int)
-      usr_store_msg =defaultdict(defactory)
-      usr_pass = {}
-      sock_ip ={}
       with open('credentials.txt') as inputfile:
             for line in inputfile:
                   usr_pass_list = line.split()
@@ -66,29 +65,40 @@ def server():
                                           if usrName in usr_pass:
                                                 print "usr exist"
                                                 if passWord == usr_pass[usrName]:
-                                                      print "passWord pass"
-                                                      usr_socket_dict[usrName] = sock
+                                                      #print "passWord pass"
                                                       print"usr_socket_dict pass"
                                                       usr_ip[usrName] = addr     
                                                       sock.send("Ok")    
-                                                      time.sleep(1)                                     
+                                                      time.sleep(1)         
+                                                      login_broad = ">>>"+usrName+"<<<" + "logs in\n"
+                                                      broadcast(login_broad)
                                                       store_msg = usr_store_msg[usrName]
                                                       sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                                                       sock_to_send.connect((addr,6655))
                                                       sock_to_send.send(store_msg)                 
-                                                      print "OK"
                                                 else:
                                                       sock.send("wrong password")
                                           else: 
                                                 sock.send("usr not exist")
                         #logout                 
                                     if recv_list[1] == "logout":
-                                          print "usr logout"
                                           usrName=recv_list[0]
-                                          SOCKET_LIST_READ.remove(sock)
-                                          sock.close()
-
-                                          
+                                          logout_broad = ">>>"+usrName+"<<<" + "logs out\n"
+                                          usr_ip.remove(usrName)
+                                          broadcast(logout_broad)
+                        #block sb
+                                    if recv_list[1] == "block":
+                                          if recv_list[2] in usr_ip:
+                                                block_usr = recv_list[2]
+                                                op_usr = recv_list[0]
+                                                usr_blacklist[op_usr].append(block_usr)
+                                                sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                sock_to_send.connect((addr,6655))
+                                                sock_to_send.send(block_usr+" is Blocked Successfully\n")
+                                          else:
+                                                sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                sock_to_send.connect((addr,6655))
+                                                sock_to_send.send("\nblock_usr doesn't exist\n")
                         #list online users
                                     if recv_list[1] == "online":
                                           print "list usr online"
@@ -98,12 +108,11 @@ def server():
                                                 usrName = recv_list[0]
                                           #sock_to_send = usr_socket_dict[usrName]
                                                 msg = "\n"
-                                                for u,s in usr_socket_dict.items(): 
+                                                for u,p in usr_ip.items(): 
                                                       u+="\n"
                                                       msg+=u
                                                 sock_to_send.send(msg)
-                                                SOCKET_LIST_READ.remove(sock)
-                                                sock.close()
+
                                           except:
                                                 print "online fail"
       			#send msg to another clnt 
@@ -113,32 +122,37 @@ def server():
                                           usrName = recv_list[0]
                                           sendTo = recv_list[2]
                                           msg = recv_list[3]
-                                          if sendTo in usr_ip:
-                                                print " usr in usr_socket_dict "
-                                                try:
-                                                      addr_msg = usr_ip[sendTo]
+                                          if sendTo in usr_pass:
+                                                if usrName not in usr_blacklist[sendTo]:
+                                                      if sendTo in usr_ip:
+                                                            try:
+                                                                  addr_msg = usr_ip[sendTo]
+                                                                  sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                                  sock_to_send.connect((addr_msg,6655))
+                                                                  sock_to_send.send("\n"+usrName + ":"+msg+"\n")
+                                                            except:
+                                                                  usr_store_msg[sendTo]+= "\n"+usrName+"said:"+msg+"\n"
+                                                      else:
+                                                      #store msg
+                                                            usr_store_msg[sendTo]+= "\n"+usrName+"said:"+msg+"\n"
+      			                        else:   
+
                                                       sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                                      sock_to_send.connect((addr_msg,6655))
-                                                      sock_to_send.send("\n"+usrName + ":"+msg+"\n")
-                                                      SOCKET_LIST_READ.remove(sock)
-                                                      sock.close()
-                                                except:
-                                                      usr_store_msg[sendTo]+= "\n"+usrName+"said:"+msg+"\n"
-                                                      SOCKET_LIST_READ.remove(sock)
-                                                      sock.close()
+                                                      sock_to_send.connect((addr,6655))
+                                                      sock_to_send.send("\nyou are blocked by this user, sending failed\n")
                                           else:
-                                          #store msg
-                                                usr_store_msg[sendTo]+= "\n"+usrName+"said:"+msg+"\n"
-                                                SOCKET_LIST_READ.remove(sock)
-                                                sock.close()
-      			#broadcast
+                                                sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                sock_to_send.connect((addr,6655))
+                                                sock_to_send.send("\nusr doesn't exist\n")
+                        #broadcast           
                                     if recv_list[1] == "broadcast":
                                           print "in broadcast mode"
                                           print usr_ip.items()
                                           msg = recv_list[2]
-                                          broadcast(s_sock,sock,msg)
-                                          SOCKET_LIST_READ.remove(sock)
-                                          sock.close()
+                                          broadcast(msg)
+
+                                    SOCKET_LIST_READ.remove(sock)
+                                    sock.close()
                               else:
       				# 0 data received from clnt sock
                               	if sock in SOCKET_LIST_READ:
@@ -148,12 +162,9 @@ def server():
                               print "in except"
                               continue
 
-
-
-def broadcast (server_socket, sock, message):
+def broadcast (message):
       print "broadcast()"
       for usr in usr_ip:
-            print "in for"
             addr_msg= usr_ip[usr]
             print addr_msg
             sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

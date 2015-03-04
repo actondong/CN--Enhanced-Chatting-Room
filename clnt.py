@@ -7,6 +7,23 @@ import logging
 from collections import defaultdict
 RECV_BUFFER = 4096
 SOCKET_LIST_READ = []
+usrName = "usr"
+
+class myThread (threading.Thread):
+    def __init__(self, name):
+        threading.Thread.__init__(self)
+        self.name = name
+    def run(self):
+        print "Starting " + self.name
+        while 1:
+            time.sleep(30)
+            t_stamp = time.datetime.now()
+            
+
+
+        print "Exiting " + self.name
+
+
 def chat_client():
     if(len(sys.argv) < 3) :
         print 'Usage : python chat_client.py hostname port'
@@ -23,7 +40,6 @@ def chat_client():
     try:
     	c_sock.connect((host,port))
     	print "connected!"
-    	print('Connected to remote host. You can start sending messages')
     	retry = 3
     	while retry>0:
     		usrName = raw_input("User Name: ")
@@ -39,7 +55,7 @@ def chat_client():
             c_sock.close()
             sys.exit("wrong usr info, Disconnected")
 
-        print "welcome"
+        print "welcome"+">>>"+ usrName+"<<<"
         time.sleep(2)
         c_sock.close()
         sys.stdout.write('[>>>] '); sys.stdout.flush()
@@ -51,21 +67,18 @@ def chat_client():
     	ready_to_read,ready_to_write,in_error = select.select(SOCKET_LIST_READ , [], [])
     	for sock in ready_to_read:
             if sock == s_sock:
-                print "in accept"
                 try:
                     s_c_sock,addr = s_sock.accept()
                     SOCKET_LIST_READ.append(s_c_sock)
                 except:
                     print "accept fail"
             elif sock == sys.stdin:
-                print "in stdin"
                 #try
                 msg = raw_input("[>>>]:")
                 c_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 c_sock.connect((host,port))   
     			#msg = sys.stdin.readline().strip()
                 if msg == "logout":
-                    print "in logout if "
                     c_sock.send(usrName+" "+msg)
                     sys.exit("Log out")
                 else:
@@ -73,7 +86,6 @@ def chat_client():
                 #except:
                 #   print "stdin fail to send"
             else:
-                print "in else"
                 data = sock.recv(4096)
                 if not data:
                     print "\nDisconnected from server"
@@ -83,7 +95,7 @@ def chat_client():
                     sys.stdout.flush()
                     SOCKET_LIST_READ.remove(sock)
                     sock.close()
-                    print "else done"
+
 
                 
 
