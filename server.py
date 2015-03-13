@@ -15,8 +15,9 @@ usr_store_msg =defaultdict(lambda:" ")
 usr_pass = {}
 usr_blacklist=defaultdict(lambda:[])
 sock_ip ={}
-usr_timeoflastsig=defaultdict(lambda:" ")
+usr_timeoflastsig=defaultdict(lambda:" ")#record time when last heartbeat received
 heartbeat_lock = threading.Lock()
+login_lock=defaultdict(lambda:" ")#lock usr if three login failure in a row
 class myThread (threading.Thread):
     def __init__(self, name):
         threading.Thread.__init__(self)
@@ -28,7 +29,7 @@ class myThread (threading.Thread):
             heartbeat_lock.acquire(1)
             for u,t in usr_timeoflastsig.items():
                   t_datetime_obj = datetime.strptime(t,"%Y-%m-%d%H:%M:%S")
-                  if (cur_timestamp - t_datetime_obj).total_seconds() > 30:                   
+                  if (cur_timestamp - t_datetime_obj).total_seconds() > 5:                   
                         # del usr_ip[u] should also be protected by a lock. 
                         try:
                               del usr_ip[u]
@@ -39,7 +40,7 @@ class myThread (threading.Thread):
                         except:
                               print "fail to logout usr thru heartbeat\n"
             heartbeat_lock.release()
-            time.sleep(30)#every 30 secs, checkout thru usr_timeoflastsig
+            time.sleep(5)#every 5 secs, checkout thru usr_timeoflastsig
 
 class myThread2 (threading.Thread):#This thread for P2P consent and privacy
       def __init__(self, name, usrName, peerName, peer_addr,peer_port, usr_ip,usr_port):
@@ -95,7 +96,6 @@ def server():
             ready_to_read,ready_to_write,in_error = select.select(SOCKET_LIST_READ,SOCKET_LIST_WRITE,[],0)
             for sock in ready_to_read:
                   if sock == s_sock:
-                        print "new clnt connecting"
       			sockfd, addr = s_sock.accept()
                         sock_ip[sockfd] = addr[0]
       			#keep record of sockfd for each addr. Later this will help get ip for usr to put into usr_ip
@@ -129,37 +129,81 @@ def server():
                                           print passWord
                                           clnt_port_l = int(recv_list[3])
                                           print clnt_port_l
-                                          if usrName in usr_pass:
-                                                if usrName not in usr_ip:
-                                                      print "usr exist"
-                                                      if passWord == usr_pass[usrName]:
-                                                            usr_ip[usrName] = addr   
-                                                            usr_port[usrName] = clnt_port_l
-                                                            sock.send("Ok")    
-                                                            time.sleep(1)         
+                                          sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                          sock_to_send.connect((addr,clnt_port_l))
+                                          if usrName in usr_pass:#usr exists
+                                                if usrName not in login_lock:#usr not locked
+                                                      if usrName not in usr_ip:#usr not already login
+                                                            print "usr exist and not login\n"
+                                                            if passWord == usr_pass[usrName]:
+                                                                  usr_ip[usrName] = addr   
+                                                                  usr_port[usrName] = clnt_port_l
+                                                                  sock_to_send.send("Ok")        
+                                                                  login_broad = ">>>"+usrName+"<<<" + "logs in\n"
+                                                                  broadcast(login_broad,addr,usr_port)
+                                                                  store_msg = usr_store_msg[usrName]#check offline msg
+                                                                  sock_to_send.send(store_msg)    
+                                                            else:
+                                                                  sock_to_send.send("wrong password")          
+                                                      else:#already login
+                                                            pre_usr_ip = usr_ip[usrName]#previous user ip
+                                                            pre_usr_port = usr_port[usrName]#previous usr port
+                                                            sock_to_pre= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                            sock_to_pre.connect((pre_usr_ip,pre_usr_port))
+                                                            msg = "logout" + " " +addr#logout previous usr and notice him new login ip
+                                                            sock_to_pre.send(msg) 
+                                                            usr_ip[usrName] = addr
+                                                            usr_port[usrName] = clnt_port_l#record new usr
+                                                            sock_to_send.send("Ok")            
                                                             login_broad = ">>>"+usrName+"<<<" + "logs in\n"
                                                             broadcast(login_broad,addr,usr_port)
-                                                            store_msg = usr_store_msg[usrName]
-                                                            sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                                            sock_to_send.connect((addr,clnt_port_l))
-                                                            sock_to_send.send(store_msg)    
+                                                            store_msg = usr_store_msg[usrName]#check offline msg
+                                                            sock_to_send.send(store_msg)   
+                                          
+                                                else:#usr locked
+                                                      cur_timestamp = datetime.now()
+                                                      t = login_lock[usrName]
+                                                      t_datetime_obj = datetime.strptime(t,"%Y-%m-%d%H:%M:%S")#form string to date obj.
+                                                      if (cur_timestamp - t_datetime_obj).total_seconds() > 30:
+                                                            if usrName not in usr_ip:#not already login
+                                                                  print "usr exist and not login\n"
+                                                                  if passWord == usr_pass[usrName]:
+                                                                        usr_ip[usrName] = addr   
+                                                                        usr_port[usrName] = clnt_port_l
+                                                                        sock_to_send.send("Ok")        
+                                                                        login_broad = ">>>"+usrName+"<<<" + "logs in\n"
+                                                                        broadcast(login_broad,addr,usr_port)
+                                                                        store_msg = usr_store_msg[usrName]#check offline msg
+                                                                        sock_to_send.send(store_msg)    
+                                                                  else:
+                                                                        sock_to_send.send("wrong password")          
+                                                            else:#already login
+                                                                  pre_usr_ip = usr_ip[usrName]#previous user ip
+                                                                  pre_usr_port = usr_port[usrName]#previous usr port
+                                                                  sock_to_pre= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                                  sock_to_pre.connect((pre_usr_ip,pre_usr_port))
+                                                                  msg = "logout" + " " +addr#logout previous usr and notice him new login ip
+                                                                  sock_to_pre.send(msg) 
+                                                                  usr_ip[usrName] = addr
+                                                                  usr_port[usrName] = clnt_port_l#record new usr
+                                                                  sock_to_send.send("Ok")            
+                                                                  login_broad = ">>>"+usrName+"<<<" + "logs in\n"
+                                                                  broadcast(login_broad,addr,usr_port)
+                                                                  store_msg = usr_store_msg[usrName]#check offline msg
+                                                                  sock_to_send.send(store_msg)   
                                                       else:
-                                                            sock.send("wrong password")          
-                                                else:
-                                                      pre_usr_ip = usr_ip[usrName]#previous user ip
-                                                      pre_usr_port = usr_port[usrName]#previous usr port
-                                                      sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                                      sock_to_send.connect((pre_usr_ip,pre_usr_port))
-                                                      msg = "logout" + " " +addr
-                                                      sock_to_send.send(msg) 
-                                                      usr_ip[usrName] = addr
-                                                      usr_port[usrName] = clnt_port_l
-                                                      sock.send("Ok")    
-                                                      time.sleep(1)         
-                                                      login_broad = ">>>"+usrName+"<<<" + "logs in\n"
-                                                      broadcast(login_broad,addr,usr_port)
+                                                            sock_to_send.send("BLOCK")
+
                                           else: 
-                                                sock.send("usr not exist")
+                                                sock_to_send.send("usr not exist")
+                        #loginfail
+
+                                    if recv_list[1] == "loginfail":
+                                          print "record loginfail"
+                                          usrName = recv_list[0]
+                                          timeoflastloginfail = recv_list[2]
+                                          login_lock[usrName] = timeoflastloginfail
+
                         #logout                 
                                     if recv_list[1] == "logout":
                                           usrName=recv_list[0]
@@ -176,7 +220,7 @@ def server():
                                           broadcast(logout_broad,addr,usr_port)
                         #block sb
                                     if recv_list[1] == "block":
-                                          if recv_list[2] in usr_ip:
+                                          if recv_list[2] in usr_pass:
                                                 block_usr = recv_list[2]#who will be blocked
                                                 op_usr = recv_list[0]#who initial the block
                                                 usr_blacklist[op_usr].append(block_usr)
@@ -189,6 +233,21 @@ def server():
                                                 sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                                                 sock_to_send.connect((addr,clnt_port_l))
                                                 sock_to_send.send("\nblock_usr doesn't exist\n")
+                        #unblock sb
+                                    if recv_list[1] == "unblock":
+                                          op_usr = recv_list[0]#who initial the block
+                                          if recv_list[2] in usr_blacklist[op_usr]:#if the person to unblock is in blacklist only
+                                                unblock_usr = recv_list[2]#who will be blocked
+                                                usr_blacklist[op_usr].remove(block_usr)
+                                                clnt_port_l = usr_port[op_usr]
+                                                sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                sock_to_send.connect((addr,clnt_port_l))
+                                                sock_to_send.send(unblock_usr+" is Unblocked Successfully\n")
+                                          else:
+                                                clnt_port_l = usr_port[op_usr]
+                                                sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                sock_to_send.connect((addr,clnt_port_l))
+                                                sock_to_send.send("\nunblock_usr doesn't exist in your blacklist\n")
                         #list online users
                                     if recv_list[1] == "online":
                                           print "list usr online"
@@ -286,13 +345,22 @@ def broadcast (message,self_addr=None,self_port=None):#if self_addr not given, s
                   port_msg = usr_port[usr] 
                   print addr_msg
                   sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                  if addr_msg != self_addr or port_msg !=  self_port :#not send to self
+                  if addr_msg == self_addr: #when the ip is the same
+                        if port_msg !=  self_port :#when test within a machine, same ip but different port implies different usrs
+                              sock_to_send.connect((addr_msg,port_msg))
+                              try : 
+                                    message = message + "\n"
+                                    sock_to_send.send(message)
+                              except :
+                                    print"fail in broadcast()"
+                  else:#when clnt on different machine, different ip implies different usrs
                         sock_to_send.connect((addr_msg,port_msg))
                         try : 
                               message = message + "\n"
                               sock_to_send.send(message)
                         except :
                               print"fail in broadcast()"
+
       else:
             print "no usr left..."
 

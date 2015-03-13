@@ -19,7 +19,7 @@ class myThread (threading.Thread):
         self.port = port
         self.usr = usr
     def run(self):
-        print "Starting " + self.name
+        #print "Starting " + self.name
         while 1:
             protocal = "heartbeat"
             t_stamp = datetime.now().strftime("%Y-%m-%d%H:%M:%S")#change datetime obj to str in a fixed format
@@ -27,7 +27,7 @@ class myThread (threading.Thread):
             c_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             c_sock.connect((self.host,self.port))  
             c_sock.send(msg)
-            time.sleep(30)#every 30 secs, send out a live signal
+            time.sleep(5)#every 5 secs, send out a live signal
 
 def chat_client():
     if(len(sys.argv) < 3) :
@@ -56,21 +56,35 @@ def chat_client():
             logIn = usrName + " " + passWord + " " + str(clnt_port_l)#initial msg sent to server includes clnt listen port. Once login
             #is authorized, the clnt listen port will be stored on server side.
             c_sock.send("logIn" +" " + logIn)
-            credentialCheck = c_sock.recv(100)
+            c_sock_feedback,addr = s_sock.accept()
+            try:
+                credentialCheck = c_sock_feedback.recv(4096)
+            except:
+                print "recv fails\n"
             print credentialCheck
+            if credentialCheck == "BLOCK":
+                c_sock_feedback.close()
+                sys.exit()
             if credentialCheck == "Ok":
                 break
             retry-=1
-        if retry == 0:
-            c_sock.close()
-            sys.exit("wrong usr info, Disconnected")
+            c_sock_feedback.close()
+            c_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            c_sock.connect((host,port))
 
+        if retry == 0:
+            t_stamp = datetime.now().strftime("%Y-%m-%d%H:%M:%S")
+            msg = usrName +" "+"loginfail"+" "+t_stamp
+            c_sock.send(msg)#send time stamp to server to prevent login for certain amount of time
+            sys.exit("wrong usr info, Disconnected")
         print "welcome"+">>>"+ usrName+"<<<"
-        time.sleep(2)
-        c_sock.close()
-        sys.stdout.write('[>>>] '); sys.stdout.flush()
-    except:
-    	sys.exit("Unable to connect")
+        sys.stdout.write('[>>>]: '); sys.stdout.flush()
+        offline_msg = c_sock_feedback.recv(4096)
+        sys.stdout.write(offline_msg);sys.stdout.flush()
+        c_sock_feedback.close()
+
+    except:	
+        sys.exit("Unable to connect, try later\n")
     hearbeat_t = myThread("heartbeat",host,port,usrName)
     hearbeat_t.setDaemon(True)
     hearbeat_t.start()
