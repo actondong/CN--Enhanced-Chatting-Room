@@ -60,12 +60,13 @@ usr_port = {}# keep port needed for p2p communication
 
 >>>Source Code Explanation<<<
 My code is commented while writing. With the design information above, it should be very clear.
+
 >>>Instructions on how to run/compile<<< 
-In terminal, cd to the folder having all source codes and files.
-To start the server:
+In terminal, cd to the folder having all source codes and files.(put your new test credential file in it too)
+>>To start the server:
 $python server.py
 
-To start the clnt:
+>>To start the clnt:
 5566 is the default server port
 Type ip in Google to get your IP.
 
