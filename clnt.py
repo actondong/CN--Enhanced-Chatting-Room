@@ -118,7 +118,7 @@ def chat_client():
             else:
                 data = sock.recv(4096)
                 if not data:
-                    print "\nsocket brokes\n"
+                    print "\n\n"
                     SOCKET_LIST_READ.remove(sock)
                 else:
                     msg = data.split(" ")
@@ -130,7 +130,13 @@ def chat_client():
                         usr_port[peerName] = int(peerPort)
                         SOCKET_LIST_READ.remove(sock)
                         sock.close()          
-                        
+                    elif msg[0] == "Privacy":#P2P privacy protocal:
+                        sys.stdout.write(data)
+                        sys.stdout.flush()
+                        feedback = raw_input(">>>Type Y to accept, N to reject<<<:")
+                        feedback = feedback.strip()
+                        sock.send(feedback)
+                        SOCKET_LIST_READ.remove(sock)#this sock will be closed on server side
                     elif msg[0] == "logout":
                         dup_ip = msg[1]
                         msg =  "logout because new login on "+dup_ip+"\n"

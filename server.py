@@ -27,8 +27,6 @@ class myThread (threading.Thread):
             cur_timestamp = datetime.now()
             heartbeat_lock.acquire(1)
             for u,t in usr_timeoflastsig.items():
-                  print u
-                  print t
                   t_datetime_obj = datetime.strptime(t,"%Y-%m-%d%H:%M:%S")
                   if (cur_timestamp - t_datetime_obj).total_seconds() > 30:                   
                         # del usr_ip[u] should also be protected by a lock. 
@@ -42,6 +40,37 @@ class myThread (threading.Thread):
                               print "fail to logout usr thru heartbeat\n"
             heartbeat_lock.release()
             time.sleep(30)#every 30 secs, checkout thru usr_timeoflastsig
+
+class myThread2 (threading.Thread):#This thread for P2P consent and privacy
+      def __init__(self, name, usrName, peerName, peer_addr,peer_port, usr_ip,usr_port):
+            threading.Thread.__init__(self)
+            self.name = name
+            self.usrName = usrName
+            self.peerName = peerName
+            self.addr = usr_ip#the ip of who initialize the request of getaddress
+            self.clnt_port_l = usr_port
+            self.peer_addr = peer_addr
+            self.peer_port = peer_port
+      def run(self):
+            print "Starting " + self.name
+            peer_sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            peer_sock_to_send.connect((self.peer_addr,self.peer_port))#the sock connecting usr who initialize the getaddress request
+            usr_sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            usr_sock_to_send.connect((self.addr,self.clnt_port_l))#the sock connecting peer
+            msg = "Privacy"+" "+self.usrName + " wants to get your IP for P2P chat. Type Y/y if agree, type N/n otherwise\n"#protocal is Privacy
+            peer_sock_to_send.send(msg)
+            feedback = peer_sock_to_send.recv(4096)#blcok for receiving
+            feedback = feedback.strip()
+            feedback = feedback.upper()
+            peer_sock_to_send.close()#This one is closed on initialization side only
+            if feedback == 'Y':
+                  msg = "usrIp " + self.peerName + " " + self.peer_addr + " " + str(self.peer_port)
+                  usr_sock_to_send.send(msg)
+            else:
+                  msg = "\nYour request is rejected\n"
+                  usr_sock_to_send.send(msg)
+            print "Ending "+self.name
+            return 0
 
 def server():
       with open('credentials.txt') as inputfile:
@@ -109,7 +138,7 @@ def server():
                                                             sock.send("Ok")    
                                                             time.sleep(1)         
                                                             login_broad = ">>>"+usrName+"<<<" + "logs in\n"
-                                                            broadcast(login_broad,addr)
+                                                            broadcast(login_broad,addr,usr_port)
                                                             store_msg = usr_store_msg[usrName]
                                                             sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                                                             sock_to_send.connect((addr,clnt_port_l))
@@ -128,7 +157,7 @@ def server():
                                                       sock.send("Ok")    
                                                       time.sleep(1)         
                                                       login_broad = ">>>"+usrName+"<<<" + "logs in\n"
-                                                      broadcast(login_broad,addr)
+                                                      broadcast(login_broad,addr,usr_port)
                                           else: 
                                                 sock.send("usr not exist")
                         #logout                 
@@ -144,7 +173,7 @@ def server():
                                           except:
                                                 print "fail to del usr_timeoflastsig"
                                           heartbeat_lock.release()
-                                          broadcast(logout_broad,addr)
+                                          broadcast(logout_broad,addr,usr_port)
                         #block sb
                                     if recv_list[1] == "block":
                                           if recv_list[2] in usr_ip:
@@ -211,10 +240,11 @@ def server():
                                                 sock_to_send.send("\nusr doesn't exist\n")
                         #broadcast           
                                     if recv_list[1] == "broadcast":
-                                          print "in broadcast mode"
-                                          print usr_ip.items()
                                           msg = recv_list[2]
-                                          broadcast(msg,addr)
+                                          usr = recv_list[0]
+                                          port = usr_port[usr]
+                                          msg = usr + " said: "+ msg
+                                          broadcast(msg,addr,port)
                         #getaddress
                                     if recv_list[1] == "getaddress":
                                           peerName = recv_list[2]
@@ -222,13 +252,20 @@ def server():
                                           clnt_port_l = usr_port[usrName]
                                           sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                                           sock_to_send.connect((addr,clnt_port_l))
-                                          try:
-                                                peer_port = usr_port[peerName]
-                                                peer_add = usr_ip[peerName]
-                                                msg = "usrIp " + peerName + " " + peer_add + " " + str(peer_port)
+                                          if usrName in usr_blacklist[peerName]:
+                                                msg = "\nsorry, you are blocked by "+peerName+". Failed to get the peer address \n"
                                                 sock_to_send.send(msg)
-                                          except:#if peer is not online, try will fail to get peer_add and peer_port
-                                                sock_to_send.send(peerName+" is not online, please send offline msg")
+                                          else:
+                                                try:
+                                                      peer_port = usr_port[peerName]
+                                                      peer_add = usr_ip[peerName]             
+                                                      P2P_Privacy = myThread2("P2P_Thread",usrName,peerName,peer_add,peer_port,addr,clnt_port_l)
+                                                      P2P_Privacy.setDaemon(True)
+                                                      P2P_Privacy.start()
+                                                except:#if peer is not online, try will fail to get peer_add and peer_port
+                                                      sock_to_send.send(peerName+" is not online, please send offline msg")     
+                                                #msg = "usrIp " + peerName + " " + peer_add + " " + str(peer_port)
+                                                #sock_to_send.send(msg)
 
                         #close the socket and remove it from Socket_List_Read after all                  
                                     SOCKET_LIST_READ.remove(sock)
@@ -241,7 +278,7 @@ def server():
                               print "in except"
                               continue
 
-def broadcast (message,self_addr=None):#if self_addr not given, send to all login usr
+def broadcast (message,self_addr=None,self_port=None):#if self_addr not given, send to all login usr
       print "broadcast()"
       if len(usr_ip.items()) > 0:
             for usr in usr_ip:
@@ -249,7 +286,7 @@ def broadcast (message,self_addr=None):#if self_addr not given, send to all logi
                   port_msg = usr_port[usr] 
                   print addr_msg
                   sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                  if addr_msg != self_addr :#not send to self
+                  if addr_msg != self_addr or port_msg !=  self_port :#not send to self
                         sock_to_send.connect((addr_msg,port_msg))
                         try : 
                               message = message + "\n"
