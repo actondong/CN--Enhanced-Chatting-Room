@@ -1,4 +1,4 @@
-CN_PA1 ChatRoom
+ChatRoom
 sd2810
 shiyu dong
 ###############
