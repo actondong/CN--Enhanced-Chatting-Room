@@ -29,7 +29,7 @@ class myThread (threading.Thread):
             heartbeat_lock.acquire(1)
             for u,t in usr_timeoflastsig.items():
                   t_datetime_obj = datetime.strptime(t,"%Y-%m-%d%H:%M:%S")
-                  if (cur_timestamp - t_datetime_obj).total_seconds() > 5:                   
+                  if (cur_timestamp - t_datetime_obj).total_seconds() > 20:                   
                         # del usr_ip[u] should also be protected by a lock. 
                         try:
                               del usr_ip[u]
@@ -40,7 +40,7 @@ class myThread (threading.Thread):
                         except:
                               print "fail to logout usr thru heartbeat\n"
             heartbeat_lock.release()
-            time.sleep(5)#every 5 secs, checkout thru usr_timeoflastsig
+            time.sleep(20)#every 20 secs, checkout thru usr_timeoflastsig
 
 class myThread2 (threading.Thread):#This thread for P2P consent and privacy
       def __init__(self, name, usrName, peerName, peer_addr,peer_port, usr_ip,usr_port):
@@ -74,6 +74,10 @@ class myThread2 (threading.Thread):#This thread for P2P consent and privacy
             return 0
 
 def server():
+      if(len(sys.argv) < 2) :
+            print 'Usage : python server.py  port'
+            sys.exit()
+      Port = int(sys.argv[1])
       with open('credentials.txt') as inputfile:
             for line in inputfile:
                   usr_pass_list = line.split()
@@ -85,7 +89,7 @@ def server():
 
       s_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       print socket.gethostname()
-      s_sock.bind((socket.gethostname(), 5566))
+      s_sock.bind((socket.gethostname(), Port))
 #become a server socket
       s_sock.listen(5)
       SOCKET_LIST_READ.append(s_sock)
@@ -116,11 +120,14 @@ def server():
                                     print recv_list
                         #heartbeat
                                     if recv_list[1] == "heartbeat":
+                                          
                                           usrName = recv_list[0]
                                           timeoflastsig = recv_list[2]
                                           heartbeat_lock.acquire(1)
+                                          timeoflastsig = datetime.now().strftime("%Y-%m-%d%H:%M:%S")#Though I receive the heartbeat having clnt side timestamp, I would use server side time as standard
                                           usr_timeoflastsig[usrName] = timeoflastsig
                                           heartbeat_lock.release()
+                                          
                         #login            
                                     if recv_list[0] == "logIn":
                                           usrName = recv_list[1]
@@ -130,6 +137,7 @@ def server():
                                           clnt_port_l = int(recv_list[3])
                                           print clnt_port_l
                                           sock_to_send = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                          time.sleep(0.5)
                                           sock_to_send.connect((addr,clnt_port_l))
                                           if usrName in usr_pass:#usr exists
                                                 if usrName not in login_lock:#usr not locked
@@ -146,12 +154,15 @@ def server():
                                                             else:
                                                                   sock_to_send.send("wrong password")          
                                                       else:#already login
-                                                            pre_usr_ip = usr_ip[usrName]#previous user ip
-                                                            pre_usr_port = usr_port[usrName]#previous usr port
-                                                            sock_to_pre= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                                            sock_to_pre.connect((pre_usr_ip,pre_usr_port))
-                                                            msg = "logout" + " " +addr#logout previous usr and notice him new login ip
-                                                            sock_to_pre.send(msg) 
+                                                            try:
+                                                                  pre_usr_ip = usr_ip[usrName]#previous user ip
+                                                                  pre_usr_port = usr_port[usrName]#previous usr port
+                                                                  sock_to_pre= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                                  sock_to_pre.connect((pre_usr_ip,pre_usr_port))
+                                                                  msg = "logout" + " " +addr#logout previous usr and notice him new login ip
+                                                                  sock_to_pre.send(msg) 
+                                                            except:#this is the case that the usr relogin after ctrl+C within 20 secs
+                                                                  pass
                                                             usr_ip[usrName] = addr
                                                             usr_port[usrName] = clnt_port_l#record new usr
                                                             sock_to_send.send("Ok")            
@@ -180,10 +191,13 @@ def server():
                                                             else:#already login
                                                                   pre_usr_ip = usr_ip[usrName]#previous user ip
                                                                   pre_usr_port = usr_port[usrName]#previous usr port
-                                                                  sock_to_pre= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                                                  sock_to_pre.connect((pre_usr_ip,pre_usr_port))
-                                                                  msg = "logout" + " " +addr#logout previous usr and notice him new login ip
-                                                                  sock_to_pre.send(msg) 
+                                                                  try:
+                                                                        sock_to_pre= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                                                        sock_to_pre.connect((pre_usr_ip,pre_usr_port))
+                                                                        msg = "logout" + " " +addr#logout previous usr and notice him new login ip
+                                                                        sock_to_pre.send(msg) 
+                                                                  except:#this is the case, the usr relogin after ctrl+C within 20 secs
+                                                                        pass
                                                                   usr_ip[usrName] = addr
                                                                   usr_port[usrName] = clnt_port_l#record new usr
                                                                   sock_to_send.send("Ok")            

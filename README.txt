@@ -3,21 +3,21 @@ sd2810
 shiyu dong
 ###############
 0. >>>even before moving to design<<<
-   I use 5566 as default listen port for server. If you fail to initialize server because of 5566 is used.
-   First
-   $lsof -i:5566
-   Then remember the pid of reported process
-   $kill <pid>
-   However, the above should never happen, os doesn't use this port and app should not use port like 5566 either. 
+   I wrote my code and tested it on my own mac. Then I tested it on clic, surprisingly, a few errors never happened when tested on my oc came out. Then I try to fix them, but without understanding exactly how clic machines are organized and how do they work(since clic is a NFS which is a complex computing cluster), I am not sure if I really fixed problems. At least, the last 10 times of tests all succeeded. But, I think it is possible to encounter with new poblems when you are testing it. If such accidents happened and made the server not responsive, please re-start the clnt and server to recover from it...
+
+   You can, start server on one clic machine, and start clnts on diferent clic machines. This would be fine. 
+
+   You can, start server on one pc and start clnts on other pcs. This would be fine.
+
+   But when I try to start my clnt on my mac and connect to server on clic machine, the socket communication dosen't work well. And I haven't fixed this problem because I don't know what would cause such problem.
 
    Use control-C to abruptly terminate clnt. cltr-C will terminate all threads of clnt/server program. Once terminate by cltr-C,
-   give os several seconds to reclaim ports. Then you can start the server again.
 
    I have everything under monioring on server side, which means you can see logs of every operation(fail or succeed) on server side stdout.
 
    I recommend you press 'return' button after every receiving to make your clnt side screen well formatted.
    
-   
+   Since in the instruction, it says that you may need to design your won protocal but not have to. I didn't design my own protocal. Instead, I use the first 'part' of every msg as protocal. Say, "message columbia 123", the first part is "message". Notice, to be the first part, there must be no space before it. If you type " message columbia 123", this would not be recognized as protocal "message".
 
 1. Design && DataStructure:
 
@@ -32,14 +32,16 @@ On server side, Initially I have sock_server_l in SOCKET_LIST_READ, and whenever
 
 Besides multiplexing select in one thread, I have two more threads on server side and one more thread on clnt side.
 
-On clnt side, I have thread for sending HeartBeat to server every 5 secs. The HeartBeat thread is started once usr successfully login. Inside the thread, there is a while 1 loop, so untill the clnt exits, the HeartBeat thread keeps sending hearbeats to server every 5 secs.
+On clnt side, I have thread for sending HeartBeat to server every 20 secs. The HeartBeat thread is started once usr successfully login. Inside the thread, there is a while 1 loop, so untill the clnt exits, the HeartBeat thread keeps sending hearbeats to server every 20 secs.
 
-On server side, First I also have a HeartBeat thread for checking heartbeat records for each usr every 5 secs. If any usr's record 				is outdated(5 secs ago), then the usr will be logouted by the server. And the server broadcasts that the usr logout. 
+On server side, First I also have a HeartBeat thread for checking heartbeat records for each usr every 20 secs. If any usr's record 	is outdated(20 secs ago), then the usr will be logouted by the server. And the server broadcasts that the usr logout. 
    				
    				Second I have a P2P thread for p2p consent/privacy purpose. The P2P thread is started every time a usr want to getaddress of a peer. Inside the P2P thread, the server initialize a sock to communicate with peer and a sock to cumminucate with usr. The P2P thread will take all variables needed to establish above two socks. 
                 The reason to have such a dependent thread is that sock.recv() will block , the server need to wait for the 
                 feedback from the peer. The sending and receiving are both done within the same thread, so the sock is closed on server side finally after sock.recv(). Notice that, while being asked for feedback from the server, the peer will 
                 be blocked till it gives feedback. This is reasonable.
+
+
 >>>DataStruct<<<
 To store information needed on both clnt and server sides, I use python dicts only.
 
@@ -64,15 +66,16 @@ My code is commented while writing. With the design information above, it should
 >>>Instructions on how to run/compile<<< 
 In terminal, cd to the folder having all source codes and files.(put your new test credential file in it too)
 >>To start the server:
-$python server.py
+$python server.py <port>
 
 >>To start the clnt:
-5566 is the default server port
 Type ip in Google to get your IP.
-
-$python clnt.py <your IP> 5566 
+$python clnt.py <your IP> <port> 
 OR
 $python clnt.py <your local host name> 5566 #To get your local host name, see info below in Sample Commands/Start Server
+OR
+If you are testing on clic machine
+$python clnt.py <clic_machine_name> <port>
 
 >>>Sample Commands (on my mac )<<<
 >>General:
@@ -131,6 +134,8 @@ welcome>>>seas<<<
 >>>seas<<<logs in
 #############
 You can add spaces after usrname or password, this will be ignored though.
+
+You shouldn't have spaces inside you usrname or password, this would be ignore even you have.
 
 You can only have three chances to login. If you login with usr seas with wrong password 3 times in a row, you will be blocked
 for 30 secs to login as seas.(NOTICE: the usr who would be blocked is the one corresponding to your last failure of login out of three, which means, if you first login with seas twice (bot fail) and then login with columbia(also fail), what would be blocked is columbia. This is not very reasonable, but since there is no more detail about how to deal with three login in a row with different usrname, so I choose to implement the above.)
@@ -263,7 +268,7 @@ You will see on columbia side :
 #############
 
 >>>>>guaranteed msg delivery<<<<<<<(bonus)
-I set heartbeat send every 5 secs, during the 5 seconds, you will have guaranteed msg delivery.
+I set heartbeat send every 20 secs, during the 20 seconds, you will have guaranteed msg delivery.
 
 If you send out a msg(thru message or private)without seeing any instruction/notification about how to send it in a right way, then the msg is guaranteed to be delivered, which means, if the receiver is offline abnormly, the msg will be saved as offline msg
 on server side.

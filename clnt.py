@@ -27,11 +27,11 @@ class myThread (threading.Thread):
             c_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             c_sock.connect((self.host,self.port))  
             c_sock.send(msg)
-            time.sleep(5)#every 5 secs, send out a live signal
+            time.sleep(20)#every 20 secs, send out a live signal
 
 def chat_client():
     if(len(sys.argv) < 3) :
-        print 'Usage : python chat_client.py hostname port'
+        print 'Usage : python client.py hostname port'
         sys.exit()
     host = sys.argv[1]
     port = int(sys.argv[2])
@@ -53,6 +53,10 @@ def chat_client():
             passWord = raw_input("PassWord: ")
             usrName = usrName.strip()
             passWord = passWord.strip()
+            usrName = usrName.split()
+            usrName = "".join(usrName)
+            passWord = passWord.split()
+            passWord = "".join(passWord)
             logIn = usrName + " " + passWord + " " + str(clnt_port_l)#initial msg sent to server includes clnt listen port. Once login
             #is authorized, the clnt listen port will be stored on server side.
             c_sock.send("logIn" +" " + logIn)
