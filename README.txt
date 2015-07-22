@@ -3,23 +3,18 @@ sd2810
 shiyu dong
 ###############
 0. >>>even before moving to design<<<
-   I wrote my code and tested it on my own mac. Then I tested it on clic, surprisingly, a few errors never happened when tested on my oc came out. Then I try to fix them, but without understanding exactly how clic machines are organized and how do they work(since clic is a NFS which is a complex computing cluster), I am not sure if I really fixed problems. At least, the last 10 times of tests all succeeded. But, I think it is possible to encounter with new poblems when you are testing it. If such accidents happened and made the server not responsive, please re-start the clnt and server to recover from it...
 
-   You can, start server on one clic machine, and start clnts on diferent clic machines. This would be fine. 
+   You can, start server on one clic machine, and start clnts on diferent clic machines.
 
-   You can, start server on one pc and start clnts on other pcs. This would be fine.
-
-   But when I try to start my clnt on my mac and connect to server on clic machine, the socket communication dosen't work well. And I haven't fixed this problem because I don't know what would cause such problem.
+   You can, start server on one pc and start clnts on other pcs. 
 
    Use control-C to abruptly terminate clnt. cltr-C will terminate all threads of clnt/server program. Once terminate by cltr-C,
 
    I have everything under monioring on server side, which means you can see logs of every operation(fail or succeed) on server side stdout.
 
-   I recommend you press 'return' button after every receiving to make your clnt side screen well formatted.
-   
-   Since in the instruction, it says that you may need to design your won protocal but not have to. I didn't design my own protocal. Instead, I use the first 'part' of every msg as protocal. Say, "message columbia 123", the first part is "message". Notice, to be the first part, there must be no space before it. If you type " message columbia 123", this would not be recognized as protocal "message".
+   I recommend you press 'return' button after every receiving to make your clnt side screen well formattSince in the instruction, it says that you may need to design your won protocal but not have to. I didn't design my own protocal. Instead, I use the first 'part' of every msg as protocal. Say, "message columbia 123", the first part is "message". Notice, to be the first part, there must be no space before it. If you type " message columbia 123", this would not be recognized as protocal "message".
 
-1. Design && DataStructure:
+   In the instruction, it says that you may need to design your won protocal, I use the first 'part' of every msg as protocal. Say, "message columbia 123", the first part is "message". Notice, to be the first part, there must be no space before it. If you type " message columbia 123", this would not be recognized as protocal "message".
 
 >>>Design<<<
 I use multiplexing non-blocking I/O [select() function from select module] mechanism in both clnt side and server side to handle
